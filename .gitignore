@@ -1,0 +1,20 @@
+# Composer
+/vendor/
+composer.lock
+
+# PHPUnit
+.phpunit.result.cache
+/coverage/
+
+# IDE
+/.idea/
+/.vscode/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+
+# Example outputs
+/examples/*.srt
+/examples/*.vtt
+/examples/*.json
+/examples/*.txt

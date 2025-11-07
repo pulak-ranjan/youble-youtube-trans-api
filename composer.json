@@ -1,0 +1,42 @@
+{
+    "name": "youble/youtube-trans-api",
+    "description": "Fetch, translate and format YouTube captions in pure PHP – no official API key, no headless browser, no framework required.",
+    "type": "library",
+    "keywords": ["youtube", "transcript", "captions", "subtitles", "api", "translate"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "pulak-ranjan",
+            "email": "pulak.ranjan@example.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.4",
+        "ext-simplexml": "*",
+        "ext-json": "*",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0",
+        "phpstan/phpstan": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Youble\\YouTubeTransApi\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Youble\\YouTubeTransApi\\Tests\\": "tests/"
+        }
+    },
+    "bin": [
+        "bin/youtube-transcript"
+    ],
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse src --level=5"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
