@@ -19,6 +19,7 @@ class Transcript
     private bool $isTranslatable;
     private ?array $translationLanguages;
     private ?Client $httpClient;
+    private ?array $cachedSnippets = null;
 
     public function __construct(
         string $videoId,
@@ -38,6 +39,10 @@ class Transcript
         $this->isTranslatable = $isTranslatable;
         $this->translationLanguages = $translationLanguages;
         $this->httpClient = $httpClient;
+
+        // Fetch immediately to avoid URL expiration
+        // YouTube transcript URLs expire within seconds
+        $this->cachedSnippets = $this->fetchFromUrl();
     }
 
     public function getLanguageCode(): string
@@ -67,11 +72,22 @@ class Transcript
 
     /**
      * Fetch the transcript snippets
+     * Returns cached data since URLs expire quickly
      *
      * @return TranscriptSnippet[]
-     * @throws GuzzleException
      */
     public function fetch(): array
+    {
+        return $this->cachedSnippets ?? [];
+    }
+
+    /**
+     * Fetch transcript data from YouTube URL
+     * Called immediately in constructor to avoid URL expiration
+     *
+     * @return TranscriptSnippet[]
+     */
+    private function fetchFromUrl(): array
     {
         $client = $this->httpClient ?? new Client();
 
