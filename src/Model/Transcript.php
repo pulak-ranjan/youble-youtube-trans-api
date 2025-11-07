@@ -76,7 +76,24 @@ class Transcript
         $client = $this->httpClient ?? new Client();
 
         $response = $client->get($this->url);
-        $xml = new SimpleXMLElement($response->getBody()->getContents());
+        $xmlContent = $response->getBody()->getContents();
+
+        // Suppress XML parsing errors and handle them gracefully
+        libxml_use_internal_errors(true);
+
+        try {
+            // Try to parse XML with options for handling malformed content
+            $xml = new SimpleXMLElement(
+                $xmlContent,
+                LIBXML_NOCDATA | LIBXML_NOWARNING | LIBXML_NOERROR
+            );
+        } catch (\Exception $e) {
+            // If parsing fails, try cleaning the XML first
+            $xmlContent = preg_replace('/[^\x{0009}\x{000a}\x{000d}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', '', $xmlContent);
+            $xml = new SimpleXMLElement($xmlContent, LIBXML_NOCDATA | LIBXML_NOWARNING | LIBXML_NOERROR);
+        }
+
+        libxml_clear_errors();
 
         $snippets = [];
         foreach ($xml->text as $text) {
