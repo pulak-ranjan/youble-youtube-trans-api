@@ -78,33 +78,83 @@ class Transcript
         $response = $client->get($this->url);
         $xmlContent = $response->getBody()->getContents();
 
+        // Clean and prepare XML content
+        $xmlContent = $this->cleanXmlContent($xmlContent);
+
         // Suppress XML parsing errors and handle them gracefully
         libxml_use_internal_errors(true);
 
+        $xml = null;
         try {
             // Try to parse XML with options for handling malformed content
-            $xml = new SimpleXMLElement(
+            $xml = simplexml_load_string(
                 $xmlContent,
+                'SimpleXMLElement',
                 LIBXML_NOCDATA | LIBXML_NOWARNING | LIBXML_NOERROR
             );
         } catch (\Exception $e) {
-            // If parsing fails, try cleaning the XML first
+            // Ignore and try alternative methods
+        }
+
+        // If simplexml_load_string failed, try more aggressive cleaning
+        if ($xml === false || $xml === null) {
+            // Remove control characters except newlines and tabs
+            $xmlContent = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/u', '', $xmlContent);
+
+            // Remove any invalid UTF-8 characters
             $xmlContent = preg_replace('/[^\x{0009}\x{000a}\x{000d}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', '', $xmlContent);
-            $xml = new SimpleXMLElement($xmlContent, LIBXML_NOCDATA | LIBXML_NOWARNING | LIBXML_NOERROR);
+
+            try {
+                $xml = simplexml_load_string(
+                    $xmlContent,
+                    'SimpleXMLElement',
+                    LIBXML_NOCDATA | LIBXML_NOWARNING | LIBXML_NOERROR | LIBXML_COMPACT | LIBXML_PARSEHUGE
+                );
+            } catch (\Exception $e) {
+                // Last resort - return empty array
+                libxml_clear_errors();
+                return [];
+            }
         }
 
         libxml_clear_errors();
 
+        if (!$xml) {
+            return [];
+        }
+
         $snippets = [];
         foreach ($xml->text as $text) {
+            $start = isset($text['start']) ? (float)$text['start'] : 0.0;
+            $dur = isset($text['dur']) ? (float)$text['dur'] : 0.0;
+
             $snippets[] = new TranscriptSnippet(
                 $this->decodeText((string)$text),
-                (float)$text['start'],
-                (float)$text['dur']
+                $start,
+                $dur
             );
         }
 
         return $snippets;
+    }
+
+    /**
+     * Clean XML content to handle malformed responses
+     */
+    private function cleanXmlContent(string $content): string
+    {
+        // Decode HTML entities first
+        $content = html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // Remove BOM and other invisible characters
+        $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
+
+        // Ensure proper UTF-8 encoding
+        if (!mb_check_encoding($content, 'UTF-8')) {
+            $content = mb_convert_encoding($content, 'UTF-8', 'UTF-8');
+        }
+
+        return trim($content);
     }
 
     /**
