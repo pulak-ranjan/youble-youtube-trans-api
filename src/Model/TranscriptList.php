@@ -86,6 +86,46 @@ class TranscriptList
     }
 
     /**
+     * Find a manually created transcript matching the requested languages
+     * Similar to Python's find_manually_created_transcript()
+     *
+     * @param string[] $languageCodes Language codes in order of preference
+     * @throws TranscriptNotFound
+     */
+    public function findManuallyCreatedTranscript(array $languageCodes): Transcript
+    {
+        foreach ($languageCodes as $code) {
+            foreach ($this->manualTranscripts as $transcript) {
+                if ($this->matchesLanguage($transcript->getLanguageCode(), $code)) {
+                    return $transcript;
+                }
+            }
+        }
+
+        throw new TranscriptNotFound($this->videoId, $languageCodes);
+    }
+
+    /**
+     * Find a generated transcript matching the requested languages
+     * Similar to Python's find_generated_transcript()
+     *
+     * @param string[] $languageCodes Language codes in order of preference
+     * @throws TranscriptNotFound
+     */
+    public function findGeneratedTranscript(array $languageCodes): Transcript
+    {
+        foreach ($languageCodes as $code) {
+            foreach ($this->generatedTranscripts as $transcript) {
+                if ($this->matchesLanguage($transcript->getLanguageCode(), $code)) {
+                    return $transcript;
+                }
+            }
+        }
+
+        throw new TranscriptNotFound($this->videoId, $languageCodes);
+    }
+
+    /**
      * Check if language codes match (supports variants like en-US, en-GB)
      */
     private function matchesLanguage(string $available, string $requested): bool
