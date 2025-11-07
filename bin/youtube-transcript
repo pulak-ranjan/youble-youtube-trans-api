@@ -1,0 +1,215 @@
+#!/usr/bin/env php
+<?php
+
+// Autoload from vendor or local
+foreach ([__DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php'] as $file) {
+    if (file_exists($file)) {
+        require $file;
+        break;
+    }
+}
+
+use Youble\YouTubeTransApi\YouTubeTranscriptApi;
+use Youble\YouTubeTransApi\Formatter\JsonFormatter;
+use Youble\YouTubeTransApi\Formatter\SrtFormatter;
+use Youble\YouTubeTransApi\Formatter\WebVttFormatter;
+use Youble\YouTubeTransApi\Formatter\TextFormatter;
+
+/**
+ * CLI tool for fetching YouTube transcripts
+ */
+class YouTubeTranscriptCli
+{
+    private YouTubeTranscriptApi $api;
+
+    public function __construct()
+    {
+        $this->api = new YouTubeTranscriptApi();
+    }
+
+    public function run(array $args): int
+    {
+        array_shift($args); // Remove script name
+
+        if (empty($args) || in_array('--help', $args) || in_array('-h', $args)) {
+            $this->showHelp();
+            return 0;
+        }
+
+        $command = array_shift($args);
+
+        switch ($command) {
+            case 'list':
+                return $this->listCommand($args);
+            case 'fetch':
+                return $this->fetchCommand($args);
+            case 'translate':
+                return $this->translateCommand($args);
+            default:
+                echo "Unknown command: {$command}\n";
+                $this->showHelp();
+                return 1;
+        }
+    }
+
+    private function listCommand(array $args): int
+    {
+        if (empty($args)) {
+            echo "Error: Video ID required\n";
+            echo "Usage: youtube-transcript list <video-id>\n";
+            return 1;
+        }
+
+        $videoId = $args[0];
+
+        try {
+            $list = $this->api->list($videoId);
+
+            echo "Available transcripts for video: {$videoId}\n\n";
+
+            echo "Manual Transcripts:\n";
+            foreach ($list->getManualTranscripts() as $t) {
+                echo "  - {$t->getLanguageName()} ({$t->getLanguageCode()})\n";
+            }
+
+            echo "\nAuto-Generated Transcripts:\n";
+            foreach ($list->getGeneratedTranscripts() as $t) {
+                echo "  - {$t->getLanguageName()} ({$t->getLanguageCode()})\n";
+            }
+
+            return 0;
+        } catch (\Exception $e) {
+            echo "Error: " . $e->getMessage() . "\n";
+            return 1;
+        }
+    }
+
+    private function fetchCommand(array $args): int
+    {
+        $videoId = null;
+        $languages = ['en'];
+        $format = 'json';
+
+        // Parse arguments
+        for ($i = 0; $i < count($args); $i++) {
+            if ($args[$i] === '--lang' && isset($args[$i + 1])) {
+                $languages = explode(',', $args[$i + 1]);
+                $i++;
+            } elseif ($args[$i] === '--format' && isset($args[$i + 1])) {
+                $format = $args[$i + 1];
+                $i++;
+            } elseif (!$videoId) {
+                $videoId = $args[$i];
+            }
+        }
+
+        if (!$videoId) {
+            echo "Error: Video ID required\n";
+            echo "Usage: youtube-transcript fetch <video-id> [--lang en,de] [--format json|srt|vtt|text]\n";
+            return 1;
+        }
+
+        try {
+            $snippets = $this->api->fetch($videoId, $languages);
+            echo $this->formatOutput($snippets, $format);
+            return 0;
+        } catch (\Exception $e) {
+            echo "Error: " . $e->getMessage() . "\n";
+            return 1;
+        }
+    }
+
+    private function translateCommand(array $args): int
+    {
+        $videoId = null;
+        $fromLang = 'en';
+        $toLang = null;
+        $format = 'json';
+
+        // Parse arguments
+        for ($i = 0; $i < count($args); $i++) {
+            if ($args[$i] === '--from' && isset($args[$i + 1])) {
+                $fromLang = $args[$i + 1];
+                $i++;
+            } elseif ($args[$i] === '--to' && isset($args[$i + 1])) {
+                $toLang = $args[$i + 1];
+                $i++;
+            } elseif ($args[$i] === '--format' && isset($args[$i + 1])) {
+                $format = $args[$i + 1];
+                $i++;
+            } elseif (!$videoId) {
+                $videoId = $args[$i];
+            }
+        }
+
+        if (!$videoId || !$toLang) {
+            echo "Error: Video ID and target language required\n";
+            echo "Usage: youtube-transcript translate <video-id> --to <lang> [--from en] [--format json|srt|vtt|text]\n";
+            return 1;
+        }
+
+        try {
+            $list = $this->api->list($videoId);
+            $transcript = $list->findTranscript([$fromLang]);
+            $translated = $transcript->translate($toLang);
+            $snippets = $translated->fetch();
+
+            echo $this->formatOutput($snippets, $format);
+            return 0;
+        } catch (\Exception $e) {
+            echo "Error: " . $e->getMessage() . "\n";
+            return 1;
+        }
+    }
+
+    private function formatOutput(array $snippets, string $format): string
+    {
+        switch ($format) {
+            case 'json':
+                return (new JsonFormatter())->format($snippets);
+            case 'srt':
+                return (new SrtFormatter())->format($snippets);
+            case 'vtt':
+                return (new WebVttFormatter())->format($snippets);
+            case 'text':
+                return (new TextFormatter())->format($snippets);
+            default:
+                throw new \InvalidArgumentException("Unknown format: {$format}");
+        }
+    }
+
+    private function showHelp(): void
+    {
+        echo <<<HELP
+YouTube Transcript API CLI Tool
+
+Usage:
+  youtube-transcript <command> [options]
+
+Commands:
+  list <video-id>
+    List all available transcripts for a video
+
+  fetch <video-id> [--lang en,de] [--format json|srt|vtt|text]
+    Fetch transcript for a video
+    --lang    Comma-separated language codes (cascade)
+    --format  Output format (default: json)
+
+  translate <video-id> --to <lang> [--from en] [--format json|srt|vtt|text]
+    Translate transcript to another language
+    --to      Target language code
+    --from    Source language code (default: en)
+    --format  Output format (default: json)
+
+Examples:
+  youtube-transcript list dQw4w9WgXcQ
+  youtube-transcript fetch dQw4w9WgXcQ --lang en --format srt
+  youtube-transcript translate dQw4w9WgXcQ --to de --from en --format text
+
+HELP;
+    }
+}
+
+// Run CLI
+$cli = new YouTubeTranscriptCli();
+exit($cli->run($argv));
